@@ -1,0 +1,64 @@
+name: absence.io 自动打卡
+
+on:
+  schedule:
+    # 上班打卡 08:00 Berlin
+    # 夏令时 CEST (UTC+2): 08:00 = 06:00 UTC
+    # 冬令时 CET  (UTC+1): 08:00 = 07:00 UTC
+    # 两个时间都触发，脚本会自动跳过重复打卡（412 响应）
+    - cron: '0 6 * * 1-5'
+    - cron: '0 7 * * 1-5'
+
+    # 下班打卡 17:00 Berlin
+    # 夏令时 CEST (UTC+2): 17:00 = 15:00 UTC
+    # 冬令时 CET  (UTC+1): 17:00 = 16:00 UTC
+    - cron: '0 15 * * 1-5'
+    - cron: '0 16 * * 1-5'
+
+  # 允许手动触发
+  workflow_dispatch:
+    inputs:
+      action:
+        description: '打卡类型'
+        required: true
+        default: 'checkin'
+        type: choice
+        options:
+          - checkin
+          - checkout
+
+jobs:
+  clock:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout 代码
+        uses: actions/checkout@v4
+
+      - name: 设置 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 安装依赖
+        run: pip install -r requirements.txt
+
+      - name: 判断打卡类型并执行
+        env:
+          ABSENCE_API_ID: ${{ secrets.ABSENCE_API_ID }}
+          ABSENCE_API_KEY: ${{ secrets.ABSENCE_API_KEY }}
+          TZ: Europe/Berlin
+        run: |
+          # 手动触发时使用 workflow_dispatch 的 action 参数
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            ACTION="${{ inputs.action }}"
+          else
+            # 根据当前 Berlin 时间判断是上班还是下班
+            HOUR=$(TZ=Europe/Berlin date +%H)
+            if [ "$HOUR" -lt 12 ]; then
+              ACTION="checkin"
+            else
+              ACTION="checkout"
+            fi
+          fi
+          echo "执行: $ACTION"
+          python absence_clock.py "$ACTION"
