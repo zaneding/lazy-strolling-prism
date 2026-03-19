@@ -1,0 +1,8 @@
+# 不自动打卡的日期（每行一个，格式：YYYY-MM-DD）
+# Dates to skip auto clock-in/out (one per line, format: YYYY-MM-DD)
+# Tage ohne automatisches Stempeln (ein Datum pro Zeile, Format: JJJJ-MM-TT)
+#
+# 示例 / Examples / Beispiele:
+# 2026-12-25
+# 2026-01-01
+# 2026-04-03
