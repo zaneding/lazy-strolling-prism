@@ -5,6 +5,8 @@ absence.io 自动打卡脚本
 用法:
   python absence_clock.py checkin   # 打卡上班
   python absence_clock.py checkout  # 打卡下班
+
+跳过日期: 在 skip_dates.txt 中每行写一个日期（YYYY-MM-DD），当天不打卡。
 """
 
 import sys
@@ -21,10 +23,34 @@ from dotenv import load_dotenv
 # ── 配置 ──────────────────────────────────────────────────────────────────────
 BASE_DIR = Path(__file__).parent
 ENV_FILE = BASE_DIR / ".env"
+SKIP_DATES_FILE = BASE_DIR / "skip_dates.txt"
 BASE_URL = "https://app.absence.io/api/v2"
 TZ_BERLIN = ZoneInfo("Europe/Berlin")
 
 load_dotenv(ENV_FILE)
+
+
+def load_skip_dates():
+    """读取 skip_dates.txt，返回日期字符串集合（YYYY-MM-DD）"""
+    if not SKIP_DATES_FILE.exists():
+        return set()
+    lines = SKIP_DATES_FILE.read_text(encoding="utf-8").splitlines()
+    dates = set()
+    for line in lines:
+        line = line.strip()
+        if line and not line.startswith("#"):
+            dates.add(line)
+    return dates
+
+
+def is_skip_today():
+    """检查今天是否在跳过日期列表中"""
+    today = datetime.now(TZ_BERLIN).strftime("%Y-%m-%d")
+    skip_dates = load_skip_dates()
+    if today in skip_dates:
+        print(f"[跳过] {today} 已在 skip_dates.txt 中，不打卡")
+        return True
+    return False
 
 
 def get_auth():
@@ -134,6 +160,10 @@ def main():
     if len(sys.argv) < 2 or sys.argv[1] not in ("checkin", "checkout"):
         print("用法: python absence_clock.py [checkin|checkout]")
         sys.exit(1)
+
+    # 检查今天是否是跳过日期
+    if is_skip_today():
+        sys.exit(0)
 
     auth = get_auth()
     user_id = get_user_id()
