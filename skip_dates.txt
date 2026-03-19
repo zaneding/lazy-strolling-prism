@@ -1,8 +1,14 @@
 # 不自动打卡的日期（每行一个，格式：YYYY-MM-DD）
 # Dates to skip auto clock-in/out (one per line, format: YYYY-MM-DD)
 # Tage ohne automatisches Stempeln (ein Datum pro Zeile, Format: JJJJ-MM-TT)
-#
-# 示例 / Examples / Beispiele:
-# 2026-12-25
-# 2026-01-01
-# 2026-04-03
+
+2026-04-03  # Karfreitag
+2026-04-06  # Ostermontag
+2026-04-07  # Ostern Brückentag
+2026-05-01  # Tag der Arbeit
+2026-05-14  # Christi Himmelfahrt
+2026-05-15  # Christi Himmelfahrt Brückentag
+2026-05-25  # Pfingstmontag
+2026-05-26  # Brückentag Pfingsten
+2026-06-04  # Fronleichnam
+2026-06-05  # Brückentag Fronleichnam
