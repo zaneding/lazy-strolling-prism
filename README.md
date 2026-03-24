@@ -24,12 +24,17 @@
 
 进入仓库页面 → Settings → Secrets and variables → Actions → New repository secret，添加：
 
-| Secret 名称 | 说明 |
-|------------|------|
-| `ABSENCE_API_ID` | API Key ID |
-| `ABSENCE_API_KEY` | API Key Secret |
+| Secret 名称 | 必填 | 说明 |
+|------------|:----:|------|
+| `ABSENCE_API_ID` | ✅ | API Key ID |
+| `ABSENCE_API_KEY` | ✅ | API Key Secret |
+| `MAIL_USERNAME` | ⭕ | 发件 Gmail 地址（用于失败通知） |
+| `MAIL_PASSWORD` | ⭕ | Gmail App Password |
+| `NOTIFY_EMAIL` | ⭕ | 收件地址（如不填则不发邮件通知） |
 
 推送代码后自动生效，无需其他操作。
+
+> **失败通知：** 打卡失败时会自动发送邮件（含日志直达链接）。需配置上方三个可选 secret；Gmail App Password 在 [Google 账户安全设置](https://myaccount.google.com/apppasswords) 中生成。遇到 401 时会自动重试一次。
 
 **3. 方式二：macOS launchd**
 
@@ -137,12 +142,17 @@ Log in to absence.io → profile avatar → Einstellungen → API Schlüssel →
 
 Go to your repository → Settings → Secrets and variables → Actions → New repository secret, and add:
 
-| Secret name | Description |
-|------------|-------------|
-| `ABSENCE_API_ID` | Your API Key ID |
-| `ABSENCE_API_KEY` | Your API Key Secret |
+| Secret name | Required | Description |
+|------------|:--------:|-------------|
+| `ABSENCE_API_ID` | ✅ | Your API Key ID |
+| `ABSENCE_API_KEY` | ✅ | Your API Key Secret |
+| `MAIL_USERNAME` | ⭕ | Gmail address to send failure notifications from |
+| `MAIL_PASSWORD` | ⭕ | Gmail App Password |
+| `NOTIFY_EMAIL` | ⭕ | Recipient email (leave unset to disable notifications) |
 
 GitHub Actions activates automatically once the code is pushed — nothing else needed.
+
+> **Failure notifications:** An email with a direct link to the logs is sent whenever clocking fails. Requires the three optional secrets above; generate a Gmail App Password at [Google Account Security](https://myaccount.google.com/apppasswords). On 401 errors the script retries once automatically.
 
 **3. Option B: macOS launchd**
 
@@ -250,12 +260,17 @@ Bei absence.io anmelden → Profilbild → Einstellungen → API Schlüssel → 
 
 Zum Repository → Settings → Secrets and variables → Actions → New repository secret, folgendes hinzufügen:
 
-| Secret-Name | Beschreibung |
-|------------|--------------|
-| `ABSENCE_API_ID` | Deine API Key ID |
-| `ABSENCE_API_KEY` | Dein API Key Secret |
+| Secret-Name | Pflicht | Beschreibung |
+|------------|:-------:|--------------|
+| `ABSENCE_API_ID` | ✅ | Deine API Key ID |
+| `ABSENCE_API_KEY` | ✅ | Dein API Key Secret |
+| `MAIL_USERNAME` | ⭕ | Gmail-Adresse für Fehlerbenachrichtigungen |
+| `MAIL_PASSWORD` | ⭕ | Gmail App-Passwort |
+| `NOTIFY_EMAIL` | ⭕ | Empfängeradresse (leer lassen = keine Benachrichtigung) |
 
 GitHub Actions wird automatisch aktiv, sobald der Code gepusht ist — kein weiterer Schritt nötig.
+
+> **Fehlerbenachrichtigung:** Bei einem Stempelfehler wird automatisch eine E-Mail mit direktem Link zu den Logs verschickt. Erfordert die drei optionalen Secrets oben; Gmail App-Passwort unter [Google-Konto Sicherheit](https://myaccount.google.com/apppasswords) erstellen. Bei 401-Fehler wird einmal automatisch wiederholt.
 
 **3. Option B: macOS launchd**
 
