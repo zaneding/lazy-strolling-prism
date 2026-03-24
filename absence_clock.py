@@ -12,6 +12,7 @@ absence.io 自动打卡脚本
 import sys
 import os
 import json
+import time
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 from pathlib import Path
@@ -88,32 +89,49 @@ def tz_offset_str(dt):
     return f"{sign}{h:02d}{m:02d}"
 
 
-def post(auth, path, payload):
-    resp = requests.post(
-        f"{BASE_URL}/{path}",
-        data=json.dumps(payload),
-        auth=auth,
-        headers={"Content-Type": "application/json"},
-    )
+def post(auth, path, payload_fn, retries=2):
+    """
+    payload_fn: 无参可调用，每次调用返回最新 payload dict（确保时间戳实时）
+    """
+    for attempt in range(1, retries + 1):
+        payload = payload_fn() if callable(payload_fn) else payload_fn
+        resp = requests.post(
+            f"{BASE_URL}/{path}",
+            data=json.dumps(payload),
+            auth=auth,
+            headers={"Content-Type": "application/json"},
+        )
+        if resp.status_code != 401 or attempt == retries:
+            return resp
+        print(f"[重试] 第 {attempt} 次请求返回 401，响应: {resp.text[:200]}，5秒后重试…")
+        time.sleep(5)
     return resp
 
 
 def checkin(auth, user_id):
-    now = now_berlin()
-    payload = {
-        "userId": user_id,
-        "start": to_utc_iso(now),
-        "end": None,
-        "timezoneName": "Europe/Berlin",
-        "timezone": tz_offset_str(now),
-        "type": "work",
-    }
-    resp = post(auth, "timespans/create", payload)
+    last_now = [None]  # mutable container，记录最后一次实际使用的时间
+
+    def make_payload():
+        now = now_berlin()
+        last_now[0] = now
+        return {
+            "userId": user_id,
+            "start": to_utc_iso(now),
+            "end": None,
+            "timezoneName": "Europe/Berlin",
+            "timezone": tz_offset_str(now),
+            "type": "work",
+        }
+
+    resp = post(auth, "timespans/create", make_payload)
+    now = last_now[0] or now_berlin()
 
     if resp.status_code == 412:
         print(f"[!] 已有未关闭的打卡记录，跳过重复打卡（{now.strftime('%Y-%m-%d %H:%M')} Berlin）")
         return
 
+    if not resp.ok:
+        print(f"[错误] 状态码 {resp.status_code}，响应: {resp.text[:500]}")
     resp.raise_for_status()
     print(f"[✓] 上班打卡成功: {now.strftime('%Y-%m-%d %H:%M')} (Berlin)")
 
@@ -132,6 +150,8 @@ def checkout(auth, user_id):
         "limit": 5,
         "skip": 0,
     })
+    if not resp.ok:
+        print(f"[错误] 查询打卡记录失败，状态码 {resp.status_code}，响应: {resp.text[:500]}")
     resp.raise_for_status()
     timespans = resp.json().get("data", [])
 

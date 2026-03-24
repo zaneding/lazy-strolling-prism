@@ -62,3 +62,32 @@ jobs:
           fi
           echo "执行: $ACTION"
           python absence_clock.py "$ACTION"
+
+  notify-failure:
+    needs: clock
+    if: ${{ failure() }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: 发送失败邮件通知
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: smtp.gmail.com
+          server_port: 465
+          secure: true
+          username: ${{ secrets.MAIL_USERNAME }}
+          password: ${{ secrets.MAIL_PASSWORD }}
+          subject: "❌ absence.io 打卡失败 #${{ github.run_number }}"
+          to: ${{ secrets.NOTIFY_EMAIL }}
+          from: "GitHub Actions <${{ secrets.MAIL_USERNAME }}>"
+          html_body: |
+            <h3>absence.io 自动打卡失败</h3>
+            <table>
+              <tr><td><b>Run</b></td><td>#${{ github.run_number }}</td></tr>
+              <tr><td><b>触发方式</b></td><td>${{ github.event_name }}</td></tr>
+              <tr><td><b>分支</b></td><td>${{ github.ref_name }}</td></tr>
+            </table>
+            <p>
+              <a href="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}">
+                点击查看详细日志
+              </a>
+            </p>
