@@ -202,6 +202,17 @@ def main():
     credentials = get_credentials()
     user_id = credentials["id"]
 
+    # 前置认证测试：用只读接口验证 Key 是否有效
+    test_resp = hawk_request("POST", f"{BASE_URL}/users", credentials, {"skip": 0, "limit": 1})
+    if test_resp.status_code == 401:
+        print(f"[致命] API Key 认证失败（/users 测试也 401），请检查 absence.io 后台的 Key Id 和 Key Secret 是否与 GitHub Secrets 完全一致")
+        print(f"[调试] Key Id 长度={len(user_id)} 值={user_id}")
+        sys.exit(1)
+    elif not test_resp.ok:
+        print(f"[警告] /users 测试返回 {test_resp.status_code}，继续执行...")
+    else:
+        print(f"[✓] API Key 认证通过")
+
     if sys.argv[1] == "checkin":
         checkin(credentials, user_id)
     else:
