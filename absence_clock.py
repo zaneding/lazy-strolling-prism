@@ -32,7 +32,6 @@ load_dotenv(ENV_FILE)
 
 
 def load_skip_dates():
-    """读取 skip_dates.txt，返回日期字符串集合（YYYY-MM-DD）"""
     if not SKIP_DATES_FILE.exists():
         return set()
     lines = SKIP_DATES_FILE.read_text(encoding="utf-8").splitlines()
@@ -45,7 +44,6 @@ def load_skip_dates():
 
 
 def is_skip_today():
-    """检查今天是否在跳过日期列表中"""
     today = datetime.now(TZ_BERLIN).strftime("%Y-%m-%d")
     skip_dates = load_skip_dates()
     if today in skip_dates:
@@ -54,40 +52,17 @@ def is_skip_today():
     return False
 
 
-def get_credentials():
+def get_auth():
     api_id = os.environ.get("ABSENCE_API_ID", "").strip()
     api_key = os.environ.get("ABSENCE_API_KEY", "").strip()
     if not api_id or not api_key:
-        print("[错误] 缺少 ABSENCE_API_ID 或 ABSENCE_API_KEY，请检查 .env")
+        print("[错误] 缺少 ABSENCE_API_ID 或 ABSENCE_API_KEY")
         sys.exit(1)
-    return {"id": api_id, "key": api_key, "algorithm": "sha256"}
-
-
-def make_hawk_auth(credentials):
-    return HawkAuth(
-        id=credentials["id"],
-        key=credentials["key"],
-        algorithm=credentials["algorithm"],
-        always_hash_content=False,
-    )
-
-
-def hawk_request(method, url, credentials, payload=None):
-    auth = make_hawk_auth(credentials)
-    kwargs = {"auth": auth}
-    if payload is not None:
-        kwargs["data"] = json.dumps(payload)
-        kwargs["headers"] = {"Content-Type": "application/json"}
-    return requests.request(method, url, **kwargs)
+    return HawkAuth(id=api_id, key=api_key, algorithm="sha256", always_hash_content=False)
 
 
 def get_user_id():
-    """userId = API Key ID（absence.io 的设计）"""
-    user_id = os.environ.get("ABSENCE_API_ID", "").strip()
-    if not user_id:
-        print("[错误] 缺少 ABSENCE_API_ID")
-        sys.exit(1)
-    return user_id
+    return os.environ.get("ABSENCE_API_ID", "").strip()
 
 
 def now_berlin():
@@ -99,63 +74,49 @@ def to_utc_iso(dt):
 
 
 def tz_offset_str(dt):
-    """返回 '+0100' 或 '+0200' 格式的时区偏移"""
     offset_seconds = int(dt.utcoffset().total_seconds())
     sign = "+" if offset_seconds >= 0 else "-"
     h, m = divmod(abs(offset_seconds) // 60, 60)
     return f"{sign}{h:02d}{m:02d}"
 
 
-def api_post(credentials, path, payload_fn, retries=2):
-    """
-    payload_fn: 无参可调用，每次调用返回最新 payload dict（确保时间戳实时）
-    每次重试都重新生成 Hawk header（新 timestamp + nonce）
-    """
-    url = f"{BASE_URL}/{path}"
-    for attempt in range(1, retries + 1):
-        payload = payload_fn() if callable(payload_fn) else payload_fn
-        resp = hawk_request("POST", url, credentials, payload)
-        if resp.status_code != 401 or attempt == retries:
-            return resp
-        print(f"[重试] 第 {attempt} 次请求返回 401，响应: {resp.text[:200]}，5秒后重试…")
-        time.sleep(5)
+def post(auth, path, payload):
+    resp = requests.post(
+        f"{BASE_URL}/{path}",
+        data=json.dumps(payload),
+        auth=auth,
+        headers={"Content-Type": "application/json"},
+    )
     return resp
 
 
-def checkin(credentials, user_id):
-    last_now = [None]
-
-    def make_payload():
-        now = now_berlin()
-        last_now[0] = now
-        return {
-            "userId": user_id,
-            "start": to_utc_iso(now),
-            "end": None,
-            "timezoneName": "Europe/Berlin",
-            "timezone": tz_offset_str(now),
-            "type": "work",
-        }
-
-    resp = api_post(credentials, "timespans/create", make_payload)
-    now = last_now[0] or now_berlin()
+def checkin(auth, user_id):
+    now = now_berlin()
+    payload = {
+        "userId": user_id,
+        "start": to_utc_iso(now),
+        "end": None,
+        "timezoneName": "Europe/Berlin",
+        "timezone": tz_offset_str(now),
+        "type": "work",
+    }
+    resp = post(auth, "timespans/create", payload)
 
     if resp.status_code == 412:
-        print(f"[!] 已有未关闭的打卡记录，跳过重复打卡（{now.strftime('%Y-%m-%d %H:%M')} Berlin）")
+        print(f"[!] 已有未关闭的打卡记录，跳过（{now.strftime('%Y-%m-%d %H:%M')} Berlin）")
         return
 
     if not resp.ok:
-        print(f"[错误] 状态码 {resp.status_code}，响应: {resp.text[:500]}")
+        print(f"[错误] 上班打卡失败 {resp.status_code}: {resp.text[:500]}")
     resp.raise_for_status()
     print(f"[✓] 上班打卡成功: {now.strftime('%Y-%m-%d %H:%M')} (Berlin)")
 
 
-def checkout(credentials, user_id):
+def checkout(auth, user_id):
     now = now_berlin()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
-    # 查找今天未关闭的打卡
-    resp = api_post(credentials, "timespans", {
+    resp = post(auth, "timespans", {
         "filter": {
             "userId": user_id,
             "start": {"$gte": to_utc_iso(today_start)},
@@ -165,7 +126,7 @@ def checkout(credentials, user_id):
         "skip": 0,
     })
     if not resp.ok:
-        print(f"[错误] 查询打卡记录失败，状态码 {resp.status_code}，响应: {resp.text[:500]}")
+        print(f"[错误] 查询打卡记录失败 {resp.status_code}: {resp.text[:500]}")
     resp.raise_for_status()
     timespans = resp.json().get("data", [])
 
@@ -180,9 +141,14 @@ def checkout(credentials, user_id):
         "timezoneName": "Europe/Berlin",
         "timezone": tz_offset_str(now),
     }
-    resp = hawk_request("PUT", f"{BASE_URL}/timespans/{ts['_id']}", credentials, update_payload)
+    resp = requests.put(
+        f"{BASE_URL}/timespans/{ts['_id']}",
+        data=json.dumps(update_payload),
+        auth=auth,
+        headers={"Content-Type": "application/json"},
+    )
     if not resp.ok:
-        print(f"[错误] 下班打卡失败，状态码 {resp.status_code}，响应: {resp.text[:500]}")
+        print(f"[错误] 下班打卡失败 {resp.status_code}: {resp.text[:500]}")
     resp.raise_for_status()
     print(f"[✓] 下班打卡成功: {now.strftime('%Y-%m-%d %H:%M')} (Berlin)")
 
@@ -192,18 +158,16 @@ def main():
         print("用法: python absence_clock.py [checkin|checkout]")
         sys.exit(1)
 
-    # 检查今天是否是跳过日期
     if is_skip_today():
         sys.exit(0)
 
-    credentials = get_credentials()
-    # absence.io 设计：API Key ID 就是 userId
-    user_id = credentials["id"]
+    auth = get_auth()
+    user_id = get_user_id()
 
     if sys.argv[1] == "checkin":
-        checkin(credentials, user_id)
+        checkin(auth, user_id)
     else:
-        checkout(credentials, user_id)
+        checkout(auth, user_id)
 
 
 if __name__ == "__main__":
