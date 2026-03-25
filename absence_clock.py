@@ -198,18 +198,8 @@ def main():
         sys.exit(0)
 
     credentials = get_credentials()
-
-    # 通过 /users 获取真实的用户 _id，不依赖 API Key ID
-    users_resp = hawk_request("POST", f"{BASE_URL}/users", credentials, {"skip": 0, "limit": 1})
-    if not users_resp.ok:
-        print(f"[致命] /users 请求失败 {users_resp.status_code}: {users_resp.text[:200]}")
-        sys.exit(1)
-    users_data = users_resp.json().get("data", [])
-    if not users_data:
-        print("[致命] /users 返回空数据，无法获取 userId")
-        sys.exit(1)
-    user_id = users_data[0]["_id"]
-    print(f"[✓] 认证通过，userId={user_id}")
+    # absence.io 设计：API Key ID 就是 userId
+    user_id = credentials["id"]
 
     if sys.argv[1] == "checkin":
         checkin(credentials, user_id)
