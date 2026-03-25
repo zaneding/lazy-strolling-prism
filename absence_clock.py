@@ -64,24 +64,22 @@ def get_credentials():
 
 
 def hawk_request(method, url, credentials, payload=None):
-    """用 mohawk 直接构造 Hawk Authorization header 并发送请求"""
+    """用 mohawk 直接构造 Hawk Authorization header 并发送请求。
+    不包含 body hash——absence.io 服务端可能在验证前处理 JSON，导致 hash 不匹配。"""
     body = json.dumps(payload).encode("utf-8") if payload is not None else b""
-    content_type = "application/json" if payload is not None else ""
+    # 不传 content/content_type，MAC 只覆盖 URL+method+timestamp+nonce
     sender = mohawk.Sender(
         credentials,
         url,
         method,
-        content=body,
-        content_type=content_type,
+        content="",
+        content_type="",
+        always_hash_content=False,
     )
     headers = {"Authorization": sender.request_header}
     if payload is not None:
         headers["Content-Type"] = "application/json"
-    resp = requests.request(method, url, data=body, headers=headers)
-    if resp.status_code == 401:
-        print(f"[调试] 401 响应头: {dict(resp.headers)}")
-        print(f"[调试] Authorization: {sender.request_header[:120]}...")
-    return resp
+    return requests.request(method, url, data=body, headers=headers)
 
 
 def get_user_id():
