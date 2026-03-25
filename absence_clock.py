@@ -18,7 +18,7 @@ from zoneinfo import ZoneInfo
 from pathlib import Path
 
 import requests
-import mohawk
+from requests_hawk import HawkAuth
 from dotenv import load_dotenv
 
 # ── 配置 ──────────────────────────────────────────────────────────────────────
@@ -63,23 +63,22 @@ def get_credentials():
     return {"id": api_id, "key": api_key, "algorithm": "sha256"}
 
 
-def hawk_request(method, url, credentials, payload=None):
-    """用 mohawk 直接构造 Hawk Authorization header 并发送请求。
-    不包含 body hash——absence.io 服务端可能在验证前处理 JSON，导致 hash 不匹配。"""
-    body = json.dumps(payload).encode("utf-8") if payload is not None else b""
-    # 不传 content/content_type，MAC 只覆盖 URL+method+timestamp+nonce
-    sender = mohawk.Sender(
-        credentials,
-        url,
-        method,
-        content="",
-        content_type="",
+def make_hawk_auth(credentials):
+    return HawkAuth(
+        id=credentials["id"],
+        key=credentials["key"],
+        algorithm=credentials["algorithm"],
         always_hash_content=False,
     )
-    headers = {"Authorization": sender.request_header}
+
+
+def hawk_request(method, url, credentials, payload=None):
+    auth = make_hawk_auth(credentials)
+    kwargs = {"auth": auth}
     if payload is not None:
-        headers["Content-Type"] = "application/json"
-    return requests.request(method, url, data=body, headers=headers)
+        kwargs["data"] = json.dumps(payload)
+        kwargs["headers"] = {"Content-Type": "application/json"}
+    return requests.request(method, url, **kwargs)
 
 
 def get_user_id():
