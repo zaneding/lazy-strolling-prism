@@ -77,7 +77,11 @@ def hawk_request(method, url, credentials, payload=None):
     headers = {"Authorization": sender.request_header}
     if payload is not None:
         headers["Content-Type"] = "application/json"
-    return requests.request(method, url, data=body, headers=headers)
+    resp = requests.request(method, url, data=body, headers=headers)
+    if resp.status_code == 401:
+        print(f"[调试] 401 响应头: {dict(resp.headers)}")
+        print(f"[调试] Authorization: {sender.request_header[:120]}...")
+    return resp
 
 
 def get_user_id():
