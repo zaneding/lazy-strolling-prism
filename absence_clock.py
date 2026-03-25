@@ -18,7 +18,7 @@ from zoneinfo import ZoneInfo
 from pathlib import Path
 
 import requests
-from requests_hawk import HawkAuth
+import mohawk
 from dotenv import load_dotenv
 
 # ── 配置 ──────────────────────────────────────────────────────────────────────
@@ -54,16 +54,30 @@ def is_skip_today():
     return False
 
 
-def get_auth():
+def get_credentials():
     api_id = os.environ.get("ABSENCE_API_ID", "").strip()
     api_key = os.environ.get("ABSENCE_API_KEY", "").strip()
     if not api_id or not api_key:
         print("[错误] 缺少 ABSENCE_API_ID 或 ABSENCE_API_KEY，请检查 .env")
         sys.exit(1)
-    # 调试：打印凭据长度和首尾字符，确认 secrets 读取正确
-    print(f"[调试] API_ID  长度={len(api_id)}  首4位={api_id[:4]}  末4位={api_id[-4:]}")
-    print(f"[调试] API_KEY 长度={len(api_key)} 首4位={api_key[:4]}  末4位={api_key[-4:]}")
-    return HawkAuth(id=api_id, key=api_key, algorithm="sha256", always_hash_content=False)
+    return {"id": api_id, "key": api_key, "algorithm": "sha256"}
+
+
+def hawk_request(method, url, credentials, payload=None):
+    """用 mohawk 直接构造 Hawk Authorization header 并发送请求"""
+    body = json.dumps(payload).encode("utf-8") if payload is not None else b""
+    content_type = "application/json" if payload is not None else ""
+    sender = mohawk.Sender(
+        credentials,
+        url,
+        method,
+        content=body,
+        content_type=content_type,
+    )
+    headers = {"Authorization": sender.request_header}
+    if payload is not None:
+        headers["Content-Type"] = "application/json"
+    return requests.request(method, url, data=body, headers=headers)
 
 
 def get_user_id():
@@ -91,17 +105,15 @@ def tz_offset_str(dt):
     return f"{sign}{h:02d}{m:02d}"
 
 
-def post(auth, path, payload_fn, retries=2):
+def api_post(credentials, path, payload_fn, retries=2):
     """
     payload_fn: 无参可调用，每次调用返回最新 payload dict（确保时间戳实时）
+    每次重试都重新生成 Hawk header（新 timestamp + nonce）
     """
+    url = f"{BASE_URL}/{path}"
     for attempt in range(1, retries + 1):
         payload = payload_fn() if callable(payload_fn) else payload_fn
-        resp = requests.post(
-            f"{BASE_URL}/{path}",
-            json=payload,
-            auth=auth,
-        )
+        resp = hawk_request("POST", url, credentials, payload)
         if resp.status_code != 401 or attempt == retries:
             return resp
         print(f"[重试] 第 {attempt} 次请求返回 401，响应: {resp.text[:200]}，5秒后重试…")
@@ -109,8 +121,8 @@ def post(auth, path, payload_fn, retries=2):
     return resp
 
 
-def checkin(auth, user_id):
-    last_now = [None]  # mutable container，记录最后一次实际使用的时间
+def checkin(credentials, user_id):
+    last_now = [None]
 
     def make_payload():
         now = now_berlin()
@@ -124,7 +136,7 @@ def checkin(auth, user_id):
             "type": "work",
         }
 
-    resp = post(auth, "timespans/create", make_payload)
+    resp = api_post(credentials, "timespans/create", make_payload)
     now = last_now[0] or now_berlin()
 
     if resp.status_code == 412:
@@ -137,12 +149,12 @@ def checkin(auth, user_id):
     print(f"[✓] 上班打卡成功: {now.strftime('%Y-%m-%d %H:%M')} (Berlin)")
 
 
-def checkout(auth, user_id):
+def checkout(credentials, user_id):
     now = now_berlin()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
     # 查找今天未关闭的打卡
-    resp = post(auth, "timespans", {
+    resp = api_post(credentials, "timespans", {
         "filter": {
             "userId": user_id,
             "start": {"$gte": to_utc_iso(today_start)},
@@ -167,11 +179,9 @@ def checkout(auth, user_id):
         "timezoneName": "Europe/Berlin",
         "timezone": tz_offset_str(now),
     }
-    resp = requests.put(
-        f"{BASE_URL}/timespans/{ts['_id']}",
-        json=update_payload,
-        auth=auth,
-    )
+    resp = hawk_request("PUT", f"{BASE_URL}/timespans/{ts['_id']}", credentials, update_payload)
+    if not resp.ok:
+        print(f"[错误] 下班打卡失败，状态码 {resp.status_code}，响应: {resp.text[:500]}")
     resp.raise_for_status()
     print(f"[✓] 下班打卡成功: {now.strftime('%Y-%m-%d %H:%M')} (Berlin)")
 
@@ -185,13 +195,13 @@ def main():
     if is_skip_today():
         sys.exit(0)
 
-    auth = get_auth()
-    user_id = get_user_id()
+    credentials = get_credentials()
+    user_id = credentials["id"]
 
     if sys.argv[1] == "checkin":
-        checkin(auth, user_id)
+        checkin(credentials, user_id)
     else:
-        checkout(auth, user_id)
+        checkout(credentials, user_id)
 
 
 if __name__ == "__main__":
