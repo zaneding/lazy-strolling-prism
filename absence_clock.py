@@ -60,7 +60,9 @@ def get_auth():
     if not api_id or not api_key:
         print("[错误] 缺少 ABSENCE_API_ID 或 ABSENCE_API_KEY，请检查 .env")
         sys.exit(1)
-    # always_hash_content=False：absence.io 不要求 body hash
+    # 调试：打印凭据长度和首尾字符，确认 secrets 读取正确
+    print(f"[调试] API_ID  长度={len(api_id)}  首4位={api_id[:4]}  末4位={api_id[-4:]}")
+    print(f"[调试] API_KEY 长度={len(api_key)} 首4位={api_key[:4]}  末4位={api_key[-4:]}")
     return HawkAuth(id=api_id, key=api_key, algorithm="sha256", always_hash_content=False)
 
 
@@ -97,9 +99,8 @@ def post(auth, path, payload_fn, retries=2):
         payload = payload_fn() if callable(payload_fn) else payload_fn
         resp = requests.post(
             f"{BASE_URL}/{path}",
-            data=json.dumps(payload),
+            json=payload,
             auth=auth,
-            headers={"Content-Type": "application/json"},
         )
         if resp.status_code != 401 or attempt == retries:
             return resp
@@ -168,9 +169,8 @@ def checkout(auth, user_id):
     }
     resp = requests.put(
         f"{BASE_URL}/timespans/{ts['_id']}",
-        data=json.dumps(update_payload),
+        json=update_payload,
         auth=auth,
-        headers={"Content-Type": "application/json"},
     )
     resp.raise_for_status()
     print(f"[✓] 下班打卡成功: {now.strftime('%Y-%m-%d %H:%M')} (Berlin)")
