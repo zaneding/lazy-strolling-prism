@@ -141,12 +141,16 @@ def checkout(auth, user_id):
         "timezoneName": "Europe/Berlin",
         "timezone": tz_offset_str(clock_dt),
     }
+    put_url = f"{BASE_URL}/timespans/{ts['_id']}"
+    print(f"[调试] PUT {put_url}")
+    print(f"[调试] payload: {json.dumps(update_payload)}")
     resp = requests.put(
-        f"{BASE_URL}/timespans/{ts['_id']}",
+        put_url,
         data=json.dumps(update_payload),
         auth=auth,
         headers={"Content-Type": "application/json"},
     )
+    print(f"[调试] 响应 {resp.status_code}: {resp.text[:1000]}")
     if not resp.ok:
         print(f"[错误] 下班打卡失败 {resp.status_code}: {resp.text[:500]}")
     resp.raise_for_status()
