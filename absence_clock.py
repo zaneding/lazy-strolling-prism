@@ -135,6 +135,7 @@ def checkout(auth, user_id):
         sys.exit(0)
 
     ts = timespans[0]
+    print(f"[调试] 找到 timespan: id={ts['_id']}, start={ts['start']}, source={ts.get('source', {})}")
     update_payload = {
         "start": ts["start"],
         "end": to_utc_iso(clock_dt),
