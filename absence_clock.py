@@ -113,8 +113,8 @@ def checkin(auth, user_id):
 
 
 def checkout(auth, user_id):
-    now = now_berlin()
-    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    clock_dt = now_berlin()
+    today_start = clock_dt.replace(hour=0, minute=0, second=0, microsecond=0)
 
     resp = post(auth, "timespans", {
         "filter": {
@@ -131,15 +131,15 @@ def checkout(auth, user_id):
     timespans = resp.json().get("data", [])
 
     if not timespans:
-        print(f"[!] 未找到今天未关闭的打卡记录（{now.strftime('%Y-%m-%d %H:%M')} Berlin）")
+        print(f"[!] 未找到今天未关闭的打卡记录（{clock_dt.strftime('%Y-%m-%d %H:%M')} Berlin）")
         sys.exit(0)
 
     ts = timespans[0]
     update_payload = {
         "start": ts["start"],
-        "end": to_utc_iso(now),
+        "end": to_utc_iso(clock_dt),
         "timezoneName": "Europe/Berlin",
-        "timezone": tz_offset_str(now),
+        "timezone": tz_offset_str(clock_dt),
     }
     resp = requests.put(
         f"{BASE_URL}/timespans/{ts['_id']}",
@@ -150,7 +150,7 @@ def checkout(auth, user_id):
     if not resp.ok:
         print(f"[错误] 下班打卡失败 {resp.status_code}: {resp.text[:500]}")
     resp.raise_for_status()
-    print(f"[✓] 下班打卡成功: {now.strftime('%Y-%m-%d %H:%M')} (Berlin)")
+    print(f"[✓] 下班打卡成功: {clock_dt.strftime('%Y-%m-%d %H:%M')} (Berlin)")
 
 
 def main():
